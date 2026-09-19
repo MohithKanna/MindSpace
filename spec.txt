@@ -1,0 +1,158 @@
+                                    editot specs
+    DOCUMENT MODEL 
+const documentState = {
+ title : "untitled"
+ pageId:"p-001"
+   blocks: {
+    byId: {
+      b1: {
+        id: "b1",
+        type: "paragraph",
+        text:"Hello World",
+        attrs: {
+          align: "left" // 👈 block-level
+        },
+
+        children: [
+          {
+            text: "Hello ",
+            marks: {}
+          },
+          {
+            text: "World",
+            marks: {
+              bold: true,
+              color: "#ff0000",
+              fontSize: 18
+            }
+          }
+        ]
+      }
+    },
+
+    order: ["b1"]
+  },
+
+  selection: {
+    blockId: "b1",
+    childIndex: 1,
+    offset: 3,
+
+    typingAttributes: {
+      bold: false,
+      italic: false,
+      color: "#000000",
+      fontSize: 16
+    }
+  }
+};
+🔧 Your final model (mentally)
+
+blocks → byId + order
+
+inline → { text, marks: {} }
+
+marks → { bold, italic, color, fontSize }
+
+block styles → { align }
+
+selection → { blockId, childIndex, offset }
+
+👉 That’s your system. Stick to it.
+
+
+b1: {
+        id: "b1",
+        type: "paragraph",
+        text:"Hello World",
+        attrs: {
+          align: "left" // 👈 block-level
+        },
+
+        children: [
+          {
+            text: "Hello ",
+            marks: {}
+          },
+          {
+            text: "World",
+            marks: {
+              bold: true,
+              color: "#ff0000",
+              fontSize: 18
+            }
+          }
+        ]
+      }
+
+      block level can be type ?? paragraph(default), apply styles
+      looping over children creating sperate spans , apply styles
+
+    debouncing updates on current block only(redefining entire specs)
+    
+
+
+mutation obs = says what happened and decide to react for changes
+ 
+full sync is necessary 
+partial sync is for current block
+
+nomalising algorithm is required(must single children per block,
+span injection it should contain text not parent div)
+history algorithm is order to respect full sync 
+
+
+/---------------------gemini----------------\
+Technical Design: Hybrid Block-Editor Architecture
+1. Core Data Philosophy
+The editor follows a Data-Driven Model where the JSON State is the single source of truth. The DOM is treated as a temporary, "dirty" buffer for user input that is periodically synchronized and normalized.
+
+Block Level: A flat list of objects (e.g., type: "paragraph") identified by a unique id.
+
+Inline Level: Each block contains a children array of text fragments.
+
+The Span Rule: All text must reside within <span> elements to ensure predictable styling and schema integrity. Raw text nodes at the block level are forbidden and corrected during synchronization.
+
+2. The Synchronization Cycle (The "Buffer" Strategy)
+To balance performance with data integrity, the editor uses two distinct synchronization paths:
+
+A. Debounced Partial Sync (The "Scraper")
+For rapid character input, the browser manages the DOM directly.
+
+Trigger: A 200ms–300ms debounce timer starts on every keystroke.
+
+Action: When the timer fires, a Scraper Function reads the active block’s DOM from scratch.
+
+Normalization: The scraper maps raw text nodes, nested tags (e.g., <b>), and styled spans into a clean JSON array of children. Adjacent children with identical marks are merged.
+
+B. Immediate Full Sync (The "Interceptors")
+Critical structural changes bypass the debounce and trigger an immediate state update and full DOM rerender.
+
+Enter Key: Intercepts the event, splits the JSON block at the caret position, generates a new block ID, and rerenders.
+
+History (Undo/Redo): Intercepts Ctrl+Z, pops a snapshot from the internal History Stack, replaces the global state, and rerenders the entire editor.
+
+3. Normalization Algorithm
+The normalization engine acts as a "Schema Enforcer" during every sync and rerender:
+
+Identity: Ensures every block div has a valid data-id.
+
+Depth Control: Flattens any nested <div> or <p> tags accidentally injected by the browser or copy-paste.
+
+Mark Translation: Converts browser-specific styles (e.g., font-weight: 700) into consistent JSON attributes (e.g., bold: true).
+
+Empty State: Prevents block collapse by ensuring empty blocks contain a Zero-Width Space (\u200B) inside a <span>.
+
+4. Selection & Caret Management
+Since full rerenders destroy and recreate the DOM tree, the editor implements a Selection Recovery system:
+
+Capture: Before a rerender, the current caret position is stored as a metadata object: { blockId, childIndex, offset }.
+
+Restore: After the DOM is rebuilt, the editor uses the Range API to find the specific <span> by index and restore the cursor focus precisely.
+
+5. History Management
+The editor ignores the native browser undo/redo stack.
+
+Internal Stack: Maintains a stack of immutable JSON state snapshots.
+
+Grouping: Consecutive character inputs are grouped into a single undo step to ensure a natural user experience.
